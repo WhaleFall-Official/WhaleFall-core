@@ -27,9 +27,11 @@ contract WhaleFall is Context, IERC20, Ownable {
     string private _name = "WhaleFall";
     string private _symbol = "WHALE";
     uint8 private _decimals = 9;
+    uint private _minReceiveTime = 2;
 
     mapping (address => bool) private _isExcludedFromFee;
     mapping (address => bool) private _isExcluded;
+    mapping (address => uint) private _lastReceiveTime;
     address[] private _excluded;
 
     mapping (address => bool) private _isWhale;
@@ -225,7 +227,7 @@ contract WhaleFall is Context, IERC20, Ownable {
         }
     }
 
-    function triggerBurnWhale() public onlyOwner{
+    function triggerBurnWhale() public onlyOwner {
         uint d = hodlCount/hodlNumBase;
         if (d >= hodlDeductCount+1){
             _burnAllWhale();
@@ -335,6 +337,10 @@ contract WhaleFall is Context, IERC20, Ownable {
 
     function setWhaleDeductRate(uint256 whaleDeductRate) external onlyOwner() {
         _whaleDeductRate = whaleDeductRate;
+    }
+
+    function setMinReceiveTime(uint256 minReceiveTime) external onlyOwner() {
+        _minReceiveTime = minReceiveTime;
     }
 
     function setMaxTxPercent(uint256 maxTxPercent) external onlyOwner() {
@@ -603,8 +609,18 @@ contract WhaleFall is Context, IERC20, Ownable {
             !_isExcluded[recipient]
         )
         {
-            _addWhale(recipient);
+            // _addWhale(recipient);
+            revert('Can not hold more than whaleLine');
         }
+
+        if(
+            !isExchangeAddr(recipient) &&
+            !_isExcluded[recipient]
+        )
+        {
+            require(now.sub(_lastReceiveTime[recipient]) >= _minReceiveTime,"can not receive in 2s");
+        }
+        _lastReceiveTime[recipient]  = now;
     }
 
     function _transferStandard(address sender, address recipient, uint256 tAmount) private {
