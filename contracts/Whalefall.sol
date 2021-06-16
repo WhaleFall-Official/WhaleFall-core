@@ -10,6 +10,7 @@ import './lib/Address.sol';
 import "./lib/SafeMath.sol";
 import './lib/FixedPoint.sol';
 
+
 contract WhaleFall is Context, IERC20, Ownable {
     using SafeMath for uint256;
     using Address for address;
@@ -21,13 +22,13 @@ contract WhaleFall is Context, IERC20, Ownable {
     mapping (address => mapping (address => uint256)) private _allowances;
 
     uint256 private constant MAX = ~uint256(0);
-    uint256 private _tTotal = 1000000000 * 10**6 * 10**9;
+    uint256 private constant _tTotal = 1000000000 * 10**6 * 10**9;
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
 
-    string private _name = "WhaleFall";
-    string private _symbol = "WHALE";
-    uint8 private _decimals = 9;
-    uint private _minReceiveTime = 2;
+    string private constant _name = "WhaleFall";
+    string private constant _symbol = "WHALE";
+    uint8 private constant _decimals = 9;
+
 
     mapping (address => bool) private _isExcludedFromFee;
     mapping (address => bool) private _isExcluded;
@@ -38,18 +39,20 @@ contract WhaleFall is Context, IERC20, Ownable {
     mapping (address => bool) private _isExcludedFromWhale;
     address[] private _whale;
     uint256 public whaleLine = 2500000 * 10**6 * 10**9;
-    uint256 public whalePriceBase = 28571429;
+    uint256 public constant whalePriceBase = 5142857142;
     uint256 public priceDeductCount;
     uint256 public _whaleDeductRate = 1;
 
     mapping (address => bool) private _isHodl;
     uint256 public hodlCount;
-    uint256 public hodlLine = 100 * 10**6 * 10**9;
-    uint256 public hodlNumBase = 10000;
+    uint256 public constant hodlLine = 100 * 10**6 * 10**9;
+    uint256 public constant hodlNumBase = 10000;
+
     uint256 public hodlDeductCount;
 
-    uint256 public transferBNBLimit = 1 * 10**18;
+    uint256 public constant transferUSDTLimit = 300 * 10**18;
     uint256 public constant TRADE_LIMIT_PEROID = 15 days;
+    uint private _minReceiveTime = 2;
     uint256 public _tradeLimitDate;
     uint256 public _maxTxAmount = 1000000000 * 10**6 * 10**9;
 
@@ -60,9 +63,11 @@ contract WhaleFall is Context, IERC20, Ownable {
 
     IUniswapV2Router02 public immutable uniswapV2Router;
     address public immutable uniswapV2Pair;
+    address public immutable usdt;
+    address public immutable bnb;
     bool inSwapAndLiquify;
     bool public swapAndLiquifyEnabled = true;
-    uint256 private numTokensSellToAddToLiquidity = 100000 * 10**6 * 10**9;
+    uint256 public numTokensSellToAddToLiquidity = 100000 * 10**6 * 10**9;
     uint256 private _tFeeTotal;
 
     event MinTokensBeforeSwapUpdated(uint256 minTokensBeforeSwap);
@@ -70,7 +75,7 @@ contract WhaleFall is Context, IERC20, Ownable {
     event SwapAndLiquify(
         uint256 tokensSwapped,
         uint256 ethReceived,
-        uint256 tokensIntoLiqudity
+        uint256 tokensIntoLiquidity
     );
     event AddWhale(address whale);
     event BurnWhale(address whale, uint256 amount);
@@ -81,22 +86,27 @@ contract WhaleFall is Context, IERC20, Ownable {
         inSwapAndLiquify = false;
     }
 
-    constructor (address _uniswapRouter) public {
+    constructor (address _uniswapRouter, address _usdtAddress, address _bnbAddress) public {
         _rOwned[_msgSender()] = _rTotal/2;
         _rOwned[address(0)] = _rTotal/2;
 
         _tradeLimitDate = block.timestamp + TRADE_LIMIT_PEROID;
 
         IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(_uniswapRouter);
-        // Create a uniswap pair for this new token
+        // Create a uniswap pair for usdt token
         uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
-        .createPair(address(this), _uniswapV2Router.WETH());
+        .createPair(address(this), _usdtAddress);
+        usdt = _usdtAddress;
+        bnb = _bnbAddress;
         // set the rest of the contract variables
         uniswapV2Router = _uniswapV2Router;
 
         //exclude owner and this contract from fee
         _isExcludedFromFee[owner()] = true;
         _isExcludedFromFee[address(this)] = true;
+
+        _isExcludedFromWhale[owner()] = true;
+        _isExcludedFromWhale[address(this)] = true;
 
         emit Transfer(address(0), _msgSender(), _tTotal);
         emit Transfer(_msgSender(), address(0), _tTotal/2);
@@ -157,7 +167,7 @@ contract WhaleFall is Context, IERC20, Ownable {
         return _isExcluded[account];
     }
 
-    function getWhalePerBNBPrice(uint amountIn) public view returns (uint amountOut) {
+    function getWhalePerUSDTPrice(uint amountIn) public view returns (uint amountOut) {
         IUniswapV2Pair pair = IUniswapV2Pair(uniswapV2Pair);
         address token0 = pair.token0();
         (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast) = pair.getReserves();
@@ -170,7 +180,7 @@ contract WhaleFall is Context, IERC20, Ownable {
         }
     }
 
-    function getBNBPerWhalePrice(uint amountIn) public view returns (uint amountOut) {
+    function getUSDTPerWhalePrice(uint amountIn) public view returns (uint amountOut) {
         IUniswapV2Pair pair = IUniswapV2Pair(uniswapV2Pair);
         address token0 = pair.token0();
         (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast) = pair.getReserves();
@@ -203,7 +213,7 @@ contract WhaleFall is Context, IERC20, Ownable {
         return _tFeeTotal;
     }
 
-    function deliver(uint256 tAmount) public {
+    function deliver(uint256 tAmount) public onlyOwner{
         address sender = _msgSender();
         require(!_isExcluded[sender], "Excluded addresses cannot call this function");
         (uint256 rAmount,,,,,) = _getValues(tAmount);
@@ -227,17 +237,17 @@ contract WhaleFall is Context, IERC20, Ownable {
         }
     }
 
-    function triggerBurnWhale() public onlyOwner {
-        uint d = hodlCount/hodlNumBase;
-        if (d >= hodlDeductCount+1){
+    function triggerBurnWhale() public onlyOwner{
+        uint d = hodlCount.div(hodlNumBase);
+        if (d >= hodlDeductCount.add(1)){
             _burnAllWhale();
-            hodlDeductCount = hodlDeductCount + 1;
+            hodlDeductCount = hodlDeductCount.add(1);
         }
 
-        uint p = getBNBPerWhalePrice(1*10**9)/whalePriceBase;
-        if (p >= (priceDeductCount+1)*10){
+        uint p = getUSDTPerWhalePrice(1*10**9).div(whalePriceBase);
+        if (p >= priceDeductCount.add(1).mul(10)){
             _burnAllWhale();
-            priceDeductCount = priceDeductCount + 1;
+            priceDeductCount = priceDeductCount.add(1);
         }
     }
 
@@ -259,7 +269,6 @@ contract WhaleFall is Context, IERC20, Ownable {
     }
 
     function excludeFromReward(address account) public onlyOwner {
-        // require(account != 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D, 'We can not exclude Uniswap router.');
         require(!_isExcluded[account], "Account is already excluded");
         require(!_isWhale[account], "Whale Account can't excluded");
         if(_rOwned[account] > 0) {
@@ -286,16 +295,15 @@ contract WhaleFall is Context, IERC20, Ownable {
         require(!_isWhale[account], "Account is whale");
         require(!_isExcluded[account], "Excluded account can't be whale");
         require(!_isExcludedFromWhale[account], "Account is excluded from whale");
+        require(!isExchangeAddr(account), "ExchangeAddr can not be whale");
         _addWhale(account);
     }
 
     function _addWhale(address account) private {
-        if(!isExchangeAddr(account) && !_isWhale[account] && !_isExcludedFromWhale[account]){
-            _isWhale[account] = true;
-            _whale.push(account);
-            _tOwned[account] = tokenFromReflection(_rOwned[account]);
-            emit AddWhale(account);
-        }
+        _isWhale[account] = true;
+        _whale.push(account);
+        _tOwned[account] = tokenFromReflection(_rOwned[account]);
+        emit AddWhale(account);
     }
 
     function removeWhale(address account) external onlyOwner {
@@ -343,6 +351,14 @@ contract WhaleFall is Context, IERC20, Ownable {
         _minReceiveTime = minReceiveTime;
     }
 
+    function setNumTokensSellToAddToLiquidity(uint256 _numTokensSellToAddToLiquidity) external onlyOwner() {
+        numTokensSellToAddToLiquidity = _numTokensSellToAddToLiquidity;
+    }
+
+    function setWhaleLine(uint256 _whaleline) external onlyOwner() {
+        whaleLine = _whaleline;
+    }
+
     function setMaxTxPercent(uint256 maxTxPercent) external onlyOwner() {
         _maxTxAmount = _tTotal.mul(maxTxPercent).div(
             10**2
@@ -354,7 +370,6 @@ contract WhaleFall is Context, IERC20, Ownable {
         emit SwapAndLiquifyEnabledUpdated(_enabled);
     }
 
-    //to recieve BNB from uniswapV2Router when swaping
     receive() external payable {}
 
     function _reflectFee(uint256 rFee, uint256 tFee) private {
@@ -445,6 +460,10 @@ contract WhaleFall is Context, IERC20, Ownable {
         return _isExcludedFromFee[account];
     }
 
+    function isExcludedFromWhale(address account) public view returns(bool) {
+        return _isExcludedFromWhale[account];
+    }
+
     function _approve(address owner, address spender, uint256 amount) private {
         require(owner != address(0), "ERC20: approve from the zero address");
         require(spender != address(0), "ERC20: approve to the zero address");
@@ -466,13 +485,19 @@ contract WhaleFall is Context, IERC20, Ownable {
             require(amount <= _maxTxAmount, "Transfer amount exceeds the maxTxAmount.");
             if (block.timestamp<=_tradeLimitDate)
             {
-                require(amount <= getWhalePerBNBPrice(transferBNBLimit), "Transfer amount exceeds the initMaxTxAmount.");
+                require(amount <= getWhalePerUSDTPrice(transferUSDTLimit), "Transfer amount exceeds the initMaxTxAmount.");
+            }
+            if(!isExchangeAddr(to))
+            {
+                require(now.sub(_lastReceiveTime[to]) >= _minReceiveTime,"can not receive in 2s");
             }
         }
+        _lastReceiveTime[to]  = now;
 
         if(isWhale(from)){
             require(amount <= dividendOf(from), "Transfer amount exceeds the dividendAmount.");
         }
+
         // is the token balance of this contract address over the min number of
         // tokens that we need to initiate a swap + liquidity lock?
         // also, don't get caught in a circular liquidity event.
@@ -506,6 +531,17 @@ contract WhaleFall is Context, IERC20, Ownable {
 
         //transfer amount, it will take tax, burn, liquidity fee
         _tokenTransfer(from,to,amount,takeFee);
+
+        if(
+            !isExchangeAddr(to) &&
+        balanceOf(to)>=whaleLine &&
+        !isWhale(to) &&
+        !_isExcludedFromWhale[to]
+        )
+        {
+            // _addWhale(recipient);
+            revert('Can not hold more than whaleLine');
+        }
     }
 
     function isExchangeAddr(address account) private returns (bool){
@@ -524,13 +560,13 @@ contract WhaleFall is Context, IERC20, Ownable {
         // this is so that we can capture exactly the amount of ETH that the
         // swap creates, and not make the liquidity event include any ETH that
         // has been manually sent to the contract
-        uint256 initialBalance = address(this).balance;
+        uint256 initialBalance = IERC20(usdt).balanceOf(address(this));
 
-        // swap tokens for ETH
-        swapTokensForEth(half); // <- this breaks the ETH -> HATE swap when swap+liquify is triggered
+        // swap tokens for USDT
+        swapTokensForUSDT(half); // <- this breaks the USDT -> HATE swap when swap+liquify is triggered
 
         // how much ETH did we just swap into?
-        uint256 newBalance = address(this).balance.sub(initialBalance);
+        uint256 newBalance = IERC20(usdt).balanceOf(address(this)).sub(initialBalance);
 
         // add liquidity to uniswap
         addLiquidity(otherHalf, newBalance);
@@ -538,32 +574,53 @@ contract WhaleFall is Context, IERC20, Ownable {
         emit SwapAndLiquify(half, newBalance, otherHalf);
     }
 
-    function swapTokensForEth(uint256 tokenAmount) private {
-        // generate the uniswap pair path of token -> weth
-        address[] memory path = new address[](2);
-        path[0] = address(this);
-        path[1] = uniswapV2Router.WETH();
+    function swapTokensForUSDT(uint256 tokenAmount) private {
+        // generate the uniswap pair path of token -> usdt -> bnb
+        address[] memory path1 = new address[](3);
+        path1[0] = address(this);
+        path1[1] = usdt;
+        path1[2] = bnb;
+        // generate the uniswap pair path of bnb -> usdt
+        address[] memory path2 = new address[](2);
+        path2[0] = bnb;
+        path2[1] = usdt;
 
         _approve(address(this), address(uniswapV2Router), tokenAmount);
 
-        // make the swap
-        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+        uint256 bnbAmountBefore = IERC20(bnb).balanceOf(address(this));
+
+        uniswapV2Router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
             tokenAmount,
-            0, // accept any amount of ETH
-            path,
+            0,
+            path1,
+            address(this),
+            block.timestamp
+        );
+
+        uint256 bnbAmountAfter = IERC20(bnb).balanceOf(address(this));
+
+        IERC20(bnb).approve(address(uniswapV2Router), bnbAmountAfter - bnbAmountBefore);
+
+        uniswapV2Router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+            bnbAmountAfter - bnbAmountBefore,
+            0,
+            path2,
             address(this),
             block.timestamp
         );
     }
 
-    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
+    function addLiquidity(uint256 tokenAmount, uint256 usdtAmount) private {
         // approve token transfer to cover all possible scenarios
         _approve(address(this), address(uniswapV2Router), tokenAmount);
+        IERC20(usdt).approve(address(uniswapV2Router), usdtAmount);
 
         // add the liquidity
-        uniswapV2Router.addLiquidityETH{value: ethAmount}(
+        uniswapV2Router.addLiquidity(
             address(this),
+            usdt,
             tokenAmount,
+            usdtAmount,
             0, // slippage is unavoidable
             0, // slippage is unavoidable
             owner(),
@@ -593,34 +650,13 @@ contract WhaleFall is Context, IERC20, Ownable {
 
         if(isHodl(sender) && (balanceOf(sender) < hodlLine) && !isExchangeAddr(sender)){
             _isHodl[sender] = false;
-            hodlCount = hodlCount-1;
+            hodlCount = hodlCount.sub(1);
         }
 
         if(!isHodl(recipient) && (balanceOf(recipient) >= hodlLine) && !isExchangeAddr(recipient)){
             _isHodl[recipient] = true;
-            hodlCount = hodlCount+1;
+            hodlCount = hodlCount.add(1);
         }
-
-        if(
-            !isExchangeAddr(recipient) &&
-            balanceOf(recipient)>=whaleLine &&
-            !isWhale(recipient) &&
-            !_isExcludedFromWhale[recipient] &&
-            !_isExcluded[recipient]
-        )
-        {
-            // _addWhale(recipient);
-            revert('Can not hold more than whaleLine');
-        }
-
-        if(
-            !isExchangeAddr(recipient) &&
-            !_isExcluded[recipient]
-        )
-        {
-            require(now.sub(_lastReceiveTime[recipient]) >= _minReceiveTime,"can not receive in 2s");
-        }
-        _lastReceiveTime[recipient]  = now;
     }
 
     function _transferStandard(address sender, address recipient, uint256 tAmount) private {
