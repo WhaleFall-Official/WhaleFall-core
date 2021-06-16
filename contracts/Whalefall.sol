@@ -514,6 +514,7 @@ contract WhaleFall is Context, IERC20, Ownable {
             overMinTokenBalance &&
             !inSwapAndLiquify &&
             from != uniswapV2Pair &&
+            to != uniswapV2Pair &&
             swapAndLiquifyEnabled
         ) {
             contractTokenBalance = numTokensSellToAddToLiquidity;
