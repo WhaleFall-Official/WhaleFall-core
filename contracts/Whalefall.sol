@@ -39,7 +39,7 @@ contract WhaleFall is Context, IERC20, Ownable {
     mapping (address => bool) private _isExcludedFromWhale;
     address[] private _whale;
     uint256 public whaleLine = 2500000 * 10**6 * 10**9;
-    uint256 public constant whalePriceBase = 5142857142;
+    uint256 public constant whalePriceBase = 5714285714;
     uint256 public priceDeductCount;
     uint256 public _whaleDeductRate = 1;
 
@@ -47,7 +47,6 @@ contract WhaleFall is Context, IERC20, Ownable {
     uint256 public hodlCount;
     uint256 public constant hodlLine = 100 * 10**6 * 10**9;
     uint256 public constant hodlNumBase = 10000;
-
     uint256 public hodlDeductCount;
 
     uint256 public constant transferUSDTLimit = 300 * 10**18;
@@ -539,7 +538,6 @@ contract WhaleFall is Context, IERC20, Ownable {
         !_isExcludedFromWhale[to]
         )
         {
-            // _addWhale(recipient);
             revert('Can not hold more than whaleLine');
         }
     }
